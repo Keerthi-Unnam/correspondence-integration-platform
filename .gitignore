@@ -1,0 +1,9 @@
+# OS
+.DS_Store
+
+# IDE
+.vscode/
+.tooling-project/
+
+# Maven / Mule build output
+target/

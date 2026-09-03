@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: corr-postgres
+    environment:
+      POSTGRES_USER: corr_user
+      POSTGRES_PASSWORD: localdev   # throwaway local-only credential, never a real secret
+      POSTGRES_DB: correspondence
+    ports:
+      - "5433:5432"
+    volumes:
+      - corr_pgdata:/var/lib/postgresql/data
+      - ./postgres-init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U corr_user -d correspondence"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  corr_pgdata:

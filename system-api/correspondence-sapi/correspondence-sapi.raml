@@ -1,0 +1,72 @@
+#%RAML 1.0
+title: Correspondence System API
+version: v1
+baseUri: http://localhost:8081/api/{version}
+mediaType: application/json
+description: System API over the correspondence ledger (PostgreSQL). No business logic; CRUD and query only.
+
+types:
+  CorrespondenceRequest:
+    type: object
+    properties:
+      requestId: string
+      customerId: string
+      templateCode:
+        type: string
+        description: e.g. STMT_MONTHLY, LOAN_WELCOME, REG_NOTICE
+      channel:
+        enum: [EMAIL, PRINT, PORTAL]
+      status:
+        enum: [RECEIVED, GENERATING, GENERATED, DELIVERED, FAILED]
+      idempotencyKey: string
+      documentId?: string
+      createdAt: datetime
+      updatedAt: datetime
+  NewCorrespondenceRequest:
+    type: object
+    properties:
+      customerId: string
+      templateCode: string
+      channel:
+        enum: [EMAIL, PRINT, PORTAL]
+      idempotencyKey: string
+  Error:
+    type: object
+    properties:
+      code: string
+      message: string
+      correlationId: string
+
+traits:
+  correlated:
+    headers:
+      x-correlation-id?:
+        type: string
+        description: Propagated end to end; generated if absent.
+
+/correspondence-requests:
+  is: [correlated]
+  get:
+    queryParameters:
+      customerId?: string
+      status?: string
+      limit?: { type: integer, default: 50, maximum: 200 }
+    responses:
+      200:
+        body: CorrespondenceRequest[]
+  post:
+    body: NewCorrespondenceRequest
+    responses:
+      201:
+        body: CorrespondenceRequest
+      409:
+        description: idempotencyKey already exists
+        body: Error
+  /{requestId}:
+    is: [correlated]
+    get:
+      responses:
+        200:
+          body: CorrespondenceRequest
+        404:
+          body: Error

@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+  xmlns:http="http://www.mulesoft.org/schema/mule/http"
+  xmlns:apikit="http://www.mulesoft.org/schema/mule/mule-apikit"
+  xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+    http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+    http://www.mulesoft.org/schema/mule/mule-apikit http://www.mulesoft.org/schema/mule/mule-apikit/current/mule-apikit.xsd">
+
+  <flow name="correspondence-sapi-main">
+    <http:listener config-ref="correspondence_sapi_httpListenerConfig" path="/api/*">
+      <http:response statusCode="#[vars.httpStatus default 200]">
+        <http:headers>#[vars.outboundHeaders default {}]</http:headers>
+      </http:response>
+      <http:error-response statusCode="#[vars.httpStatus default 500]">
+        <http:body>#[payload]</http:body>
+        <http:headers>#[vars.outboundHeaders default {}]</http:headers>
+      </http:error-response>
+    </http:listener>
+    <apikit:router config-ref="correspondence_sapi_config" />
+        <error-handler>
+      <on-error-propagate type="APIKIT:BAD_REQUEST">
+        <set-variable variableName="httpStatus" value="400" />
+        <set-payload value='#[output application/json --- {code: "BAD_REQUEST", message: "Request does not match the API contract", correlationId: correlationId}]' />
+      </on-error-propagate>
+      <on-error-propagate type="APIKIT:NOT_FOUND">
+        <set-variable variableName="httpStatus" value="404" />
+        <set-payload value='#[output application/json --- {code: "NOT_FOUND", message: "Resource not found", correlationId: correlationId}]' />
+      </on-error-propagate>
+      <on-error-propagate type="APIKIT:METHOD_NOT_ALLOWED">
+        <set-variable variableName="httpStatus" value="405" />
+        <set-payload value='#[output application/json --- {code: "METHOD_NOT_ALLOWED", message: "Method not allowed", correlationId: correlationId}]' />
+      </on-error-propagate>
+      <on-error-propagate type="APIKIT:NOT_ACCEPTABLE">
+        <set-variable variableName="httpStatus" value="406" />
+        <set-payload value='#[output application/json --- {code: "NOT_ACCEPTABLE", message: "Not acceptable", correlationId: correlationId}]' />
+      </on-error-propagate>
+      <on-error-propagate type="APIKIT:UNSUPPORTED_MEDIA_TYPE">
+        <set-variable variableName="httpStatus" value="415" />
+        <set-payload value='#[output application/json --- {code: "UNSUPPORTED_MEDIA_TYPE", message: "Unsupported media type", correlationId: correlationId}]' />
+      </on-error-propagate>
+    </error-handler>
+  </flow>
+
+  <flow name="get:\correspondence-requests:correspondence_sapi_config">
+    <set-payload value='#[output application/json --- []]' />
+  </flow>
+
+  <flow name="post:\correspondence-requests:correspondence_sapi_config">
+    <set-variable variableName="httpStatus" value="201" />
+    <set-payload value='#[output application/json --- {message: "not implemented yet"}]' />
+  </flow>
+
+  <flow name="get:\correspondence-requests\(requestId):correspondence_sapi_config">
+    <set-payload value='#[output application/json --- {message: "placeholder — Block 3 wires this to Postgres", requestId: attributes.uriParams.requestId}]' />
+  </flow>
+
+</mule>

@@ -2,11 +2,13 @@
 <mule xmlns="http://www.mulesoft.org/schema/mule/core"
   xmlns:http="http://www.mulesoft.org/schema/mule/http"
   xmlns:apikit="http://www.mulesoft.org/schema/mule/mule-apikit"
+  xmlns:db="http://www.mulesoft.org/schema/mule/db"
+  xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
   xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
   xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
     http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
-    http://www.mulesoft.org/schema/mule/mule-apikit http://www.mulesoft.org/schema/mule/mule-apikit/current/mule-apikit.xsd">
+    http://www.mulesoft.org/schema/mule/mule-apikit http://www.mulesoft.org/schema/mule/mule-apikit/current/mule-apikit.xsd http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
 
   <flow name="correspondence-sapi-main">
     <http:listener config-ref="correspondence_sapi_httpListenerConfig" path="/api/*">
@@ -24,7 +26,7 @@
         <set-variable variableName="httpStatus" value="400" />
         <set-payload value='#[output application/json --- {code: "BAD_REQUEST", message: "Request does not match the API contract", correlationId: correlationId}]' />
       </on-error-propagate>
-      <on-error-propagate type="APIKIT:NOT_FOUND">
+      <on-error-propagate type="APIKIT:NOT_FOUND, APP:NOT_FOUND">
         <set-variable variableName="httpStatus" value="404" />
         <set-payload value='#[output application/json --- {code: "NOT_FOUND", message: "Resource not found", correlationId: correlationId}]' />
       </on-error-propagate>
@@ -53,7 +55,41 @@
   </flow>
 
   <flow name="get:\correspondence-requests\(requestId):correspondence_sapi_config">
-    <set-payload value='#[output application/json --- {message: "placeholder — Block 3 wires this to Postgres", requestId: attributes.uriParams.requestId}]' />
+       <db:select config-ref="Database_Config" doc:name="Select request by id">
+      <db:sql><![CDATA[
+        SELECT request_id, customer_id, template_code, channel, status,
+               idempotency_key, document_id, created_at, updated_at
+        FROM correspondence_request
+        WHERE request_id = CAST(:requestId AS uuid)
+      ]]></db:sql>
+      <db:input-parameters><![CDATA[#[{ requestId: attributes.uriParams.requestId }]]]></db:input-parameters>
+    </db:select>
+    <choice doc:name="Found?">
+      <when expression="#[isEmpty(payload)]">
+        <raise-error type="APP:NOT_FOUND" description="No correspondence request with that id" />
+      </when>
+      <otherwise>
+        <ee:transform doc:name="Row to API resource">
+          <ee:message>
+            <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+var row = payload[0]
+---
+{
+    requestId:      row.request_id,
+    customerId:     row.customer_id,
+    templateCode:   row.template_code,
+    channel:        row.channel,
+    status:         row.status,
+    idempotencyKey: row.idempotency_key,
+    (documentId: row.document_id) if (row.document_id != null),
+    createdAt:      row.created_at,
+    updatedAt:      row.updated_at
+}]]></ee:set-payload>
+          </ee:message>
+        </ee:transform>
+      </otherwise>
+    </choice>
   </flow>
 
 </mule>

@@ -1,0 +1,10 @@
+
+http:
+  port: "8081"
+
+db:
+  host: "localhost"
+  port: "5433"   # NOT 5432 - a pre-existing system Postgres owns that port on this Mac
+  database: "correspondence"
+  user: "corr_user"
+  password: "localdev"

@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+    <error-handler name="global-error-handler">
+<on-error-propagate type="APP:INVALID_ID, APIKIT:BAD_REQUEST">
+    <ee:transform><ee:message><ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{ code: "BAD_REQUEST", message: error.description default "Request is invalid", correlationId: correlationId }]]></ee:set-payload></ee:message></ee:transform>
+    <set-variable variableName="httpStatus" value="400" />
+</on-error-propagate>
+<on-error-propagate type="APIKIT:NOT_FOUND, APP:NOT_FOUND">
+    <ee:transform><ee:message><ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{ code: "NOT_FOUND", message: error.description default "Resource not found", correlationId: correlationId }]]></ee:set-payload></ee:message></ee:transform>
+    <set-variable variableName="httpStatus" value="404" />
+</on-error-propagate>
+<on-error-propagate type="APIKIT:METHOD_NOT_ALLOWED, APIKIT:NOT_ACCEPTABLE, APIKIT:UNSUPPORTED_MEDIA_TYPE">
+    <ee:transform><ee:message><ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{ code: "REQUEST_NOT_SUPPORTED", message: error.description default "Request not supported", correlationId: correlationId }]]></ee:set-payload></ee:message></ee:transform>
+    <set-variable variableName="httpStatus" value="#[{'METHOD_NOT_ALLOWED': 405, 'NOT_ACCEPTABLE': 406, 'UNSUPPORTED_MEDIA_TYPE': 415}[error.errorType.identifier] default 400]" />
+</on-error-propagate>
+<on-error-propagate type="DB:CONNECTIVITY, DB:RETRY_EXHAUSTED">
+    <ee:transform><ee:message><ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{ code: "DEPENDENCY_UNAVAILABLE", message: "A backing service is currently unavailable", correlationId: correlationId }]]></ee:set-payload></ee:message></ee:transform>
+    <set-variable variableName="httpStatus" value="503" />
+</on-error-propagate>
+<on-error-propagate type="ANY">
+    <ee:transform><ee:message><ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{ code: "INTERNAL_ERROR", message: "An unexpected error occurred", correlationId: correlationId }]]></ee:set-payload></ee:message></ee:transform>
+    <set-variable variableName="httpStatus" value="500" />
+</on-error-propagate>
+    </error-handler>
+
+</mule>

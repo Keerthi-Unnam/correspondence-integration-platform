@@ -21,28 +21,7 @@
       </http:error-response>
     </http:listener>
     <apikit:router config-ref="correspondence_sapi_config" />
-        <error-handler>
-      <on-error-propagate type="APIKIT:BAD_REQUEST">
-        <set-variable variableName="httpStatus" value="400" />
-        <set-payload value='#[output application/json --- {code: "BAD_REQUEST", message: "Request does not match the API contract", correlationId: correlationId}]' />
-      </on-error-propagate>
-      <on-error-propagate type="APIKIT:NOT_FOUND, APP:NOT_FOUND">
-        <set-variable variableName="httpStatus" value="404" />
-        <set-payload value='#[output application/json --- {code: "NOT_FOUND", message: "Resource not found", correlationId: correlationId}]' />
-      </on-error-propagate>
-      <on-error-propagate type="APIKIT:METHOD_NOT_ALLOWED">
-        <set-variable variableName="httpStatus" value="405" />
-        <set-payload value='#[output application/json --- {code: "METHOD_NOT_ALLOWED", message: "Method not allowed", correlationId: correlationId}]' />
-      </on-error-propagate>
-      <on-error-propagate type="APIKIT:NOT_ACCEPTABLE">
-        <set-variable variableName="httpStatus" value="406" />
-        <set-payload value='#[output application/json --- {code: "NOT_ACCEPTABLE", message: "Not acceptable", correlationId: correlationId}]' />
-      </on-error-propagate>
-      <on-error-propagate type="APIKIT:UNSUPPORTED_MEDIA_TYPE">
-        <set-variable variableName="httpStatus" value="415" />
-        <set-payload value='#[output application/json --- {code: "UNSUPPORTED_MEDIA_TYPE", message: "Unsupported media type", correlationId: correlationId}]' />
-      </on-error-propagate>
-    </error-handler>
+        <error-handler ref="global-error-handler" />
   </flow>
 
   <flow name="get:\correspondence-requests:correspondence_sapi_config">
@@ -55,6 +34,14 @@
   </flow>
 
   <flow name="get:\correspondence-requests\(requestId):correspondence_sapi_config">
+  <choice doc:name="Valid UUID?">
+    <when expression="#[not (attributes.uriParams.requestId matches /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/)]">
+        <raise-error type="APP:INVALID_ID" description="requestId must be a UUID" />
+    </when>
+    <otherwise>
+        <logger level="DEBUG" message="requestId format ok" />
+    </otherwise>
+</choice>
        <db:select config-ref="Database_Config" doc:name="Select request by id">
       <db:sql><![CDATA[
         SELECT request_id, customer_id, template_code, channel, status,
@@ -72,20 +59,11 @@
         <ee:transform doc:name="Row to API resource">
           <ee:message>
             <ee:set-payload><![CDATA[%dw 2.0
+import dw::Mappers
 output application/json
-var row = payload[0]
 ---
-{
-    requestId:      row.request_id,
-    customerId:     row.customer_id,
-    templateCode:   row.template_code,
-    channel:        row.channel,
-    status:         row.status,
-    idempotencyKey: row.idempotency_key,
-    (documentId: row.document_id) if (row.document_id != null),
-    createdAt:      row.created_at,
-    updatedAt:      row.updated_at
-}]]></ee:set-payload>
+Mappers::toResource(payload[0])
+]]></ee:set-payload>
           </ee:message>
         </ee:transform>
       </otherwise>

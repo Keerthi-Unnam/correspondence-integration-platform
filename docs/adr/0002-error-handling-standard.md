@@ -5,20 +5,46 @@
 Accepted — 2026-09-28
 
 ## Context
-(What problem existed? Errors could be reported differently by every
-endpoint. Callers would need a parser per endpoint. Backend details
-could leak to callers.)
+Every endpoint can fail in several ways: a malformed request, an unknown
+ID, a duplicate, a database that is down. Without a shared approach, each
+flow would handle these itself. With three endpoints and six kinds of
+error that is eighteen blocks of near-identical code, and copies drift
+apart: one flow returns "NOT_FOUND" while another returns
+"RESOURCE_MISSING", and a caller cannot rely on either. Adding a field to
+the error response would mean editing every copy and missing one. There
+is also a risk of returning raw database messages, which expose table and
+constraint names to callers.
 
 ## Decision
-(One global error handler, referenced by every flow. One envelope:
-code, message, correlationId. Backend errors mapped to application
-error types at the point they occur. on-error-propagate, not continue.)
+One error handler is defined in global-error-handler.xml and referenced by
+every flow with <error-handler ref="global-error-handler" />. It contains
+one block per kind of error, matched top to bottom, with ANY last.
+
+Every failure returns the same three fields: code, message and
+correlationId. Backend-specific errors are translated into application
+error types where they happen — the database's generic query failure
+becomes APP:DUPLICATE_KEY at the insert — so the handler responds
+meaningfully without knowing anything about databases.
+
+Handlers use on-error-propagate: an API that failed reports failure to its
+caller. No database message or stack trace is ever returned.
 
 ## Consequences
-(Good: one parser for callers, one place to change, no leakage.
-Cost: a custom error type needs a producer before a handler can
-reference it — which is a real build failure I hit.)
+Callers write one error parser instead of one per endpoint. Support staff
+have a correlationId to search the logs with. Changing the envelope means
+changing one file.
+
+The cost: a custom APP:* error type must have something that produces it —
+a raise-error or an error-mapping — before any handler may reference it.
+I hit this as a real build failure: the handler named APP:INVALID_ID and
+APP:DUPLICATE_KEY before either existed, and the app refused to start
+until a producer for each was added.
 
 ## Alternatives considered
-(Per-endpoint handlers — rejected because...
-Returning the raw backend message — rejected because...)
+A handler inside each flow. Rejected: eighteen copies of the same logic,
+which drift apart silently and must all be edited for any change.
+
+Returning the backend's own error message to the caller. Rejected: it
+leaks table and constraint names, the wording changes when the database
+version changes, and callers would be parsing text meant for developers
+rather than a stable code.

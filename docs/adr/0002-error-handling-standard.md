@@ -36,7 +36,7 @@ changing one file.
 
 The cost: a custom APP:* error type must have something that produces it —
 a raise-error or an error-mapping — before any handler may reference it.
-I hit this as a real build failure: the handler named APP:INVALID_ID and
+This surfaced as a real build failure during implementation: the handler named APP:INVALID_ID and
 APP:DUPLICATE_KEY before either existed, and the app refused to start
 until a producer for each was added.
 

@@ -34,6 +34,13 @@ output application/json
 { code: "DEPENDENCY_UNAVAILABLE", message: "A backing service is currently unavailable", correlationId: correlationId }]]></ee:set-payload></ee:message></ee:transform>
     <set-variable variableName="httpStatus" value="503" />
 </on-error-propagate>
+<on-error-propagate type="APP:DUPLICATE_KEY">
+    <ee:transform><ee:message><ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{ code: "DUPLICATE_REQUEST", message: "A request with this idempotency key already exists", correlationId: correlationId }]]></ee:set-payload></ee:message></ee:transform>
+    <set-variable variableName="httpStatus" value="409" />
+</on-error-propagate>
 <on-error-propagate type="ANY">
     <ee:transform><ee:message><ee:set-payload><![CDATA[%dw 2.0
 output application/json

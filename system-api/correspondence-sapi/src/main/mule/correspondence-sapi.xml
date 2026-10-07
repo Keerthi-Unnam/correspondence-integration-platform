@@ -25,12 +25,70 @@
   </flow>
 
   <flow name="get:\correspondence-requests:correspondence_sapi_config">
-    <set-payload value='#[output application/json --- []]' />
+		<db:select doc:name="List correspondence requests" doc:id="8e814f6a-46f9-4181-9d9d-757e8db4a69c" config-ref="Database_Config">
+			<db:sql ><![CDATA[SELECT request_id, customer_id, template_code, channel, status,
+       idempotency_key, document_id, created_at, updated_at
+FROM correspondence_request
+WHERE (CAST(:status AS text) IS NULL OR status = CAST(:status AS text))
+  AND (CAST(:customerId AS text) IS NULL OR customer_id = CAST(:customerId AS text))
+ORDER BY created_at DESC
+LIMIT 50]]></db:sql>
+			<db:input-parameters><![CDATA[#[{
+    status:     attributes.queryParams.status default null,
+    customerId: attributes.queryParams.customerId default null
+}]]]></db:input-parameters>
+		</db:select>
+		<ee:transform doc:name="Rows to API resources" doc:id="c468f24d-df93-4c96-9bbd-2670665d78ac" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+import dw::Mappers
+output application/json
+---
+payload map ((row) -> Mappers::toResource(row))]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
   </flow>
 
   <flow name="post:\correspondence-requests:correspondence_sapi_config">
-    <set-variable variableName="httpStatus" value="201" />
-    <set-payload value='#[output application/json --- {message: "not implemented yet"}]' />
+		<ee:transform doc:name="Prepare request values" doc:id="4e9d7c88-d4f2-440e-8559-a74dbc8331fd" >
+			<ee:message >
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="newRequest" ><![CDATA[%dw 2.0
+output application/java
+---
+{
+	requestId:      uuid(),
+    customerId:     payload.customerId,
+    templateCode:   payload.templateCode,
+    channel:        payload.channel,
+    idempotencyKey: payload.idempotencyKey
+}]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<db:insert doc:name="Insert correspondence request" doc:id="6971d5b7-8931-4838-a74e-20165fbca1c5" config-ref="Database_Config">
+			<error-mapping sourceType="DB:QUERY_EXECUTION" targetType="APP:DUPLICATE_KEY" />
+			<db:sql ><![CDATA[INSERT INTO correspondence_request (request_id, customer_id, template_code, channel, idempotency_key)
+VALUES (CAST(:requestId AS uuid), :customerId, :templateCode, :channel, :idempotencyKey)]]></db:sql>
+			<db:input-parameters><![CDATA[#[vars.newRequest]]]></db:input-parameters>
+		</db:insert>
+		<db:select doc:name="Read back created request" doc:id="7df02aae-e629-4061-98d4-67d0dccb9447" config-ref="Database_Config">
+			<db:sql ><![CDATA[SELECT request_id, customer_id, template_code, channel, status,
+       idempotency_key, document_id, created_at, updated_at
+FROM correspondence_request
+WHERE request_id = CAST(:requestId AS uuid)]]></db:sql>
+			<db:input-parameters ><![CDATA[#[{ requestId: vars.newRequest.requestId }]]]></db:input-parameters>
+		</db:select>
+		<ee:transform doc:name="Build 201 response" doc:id="e741994f-7be2-417d-bf0d-63ba7ffb05b9" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+import dw::Mappers
+output application/json
+---
+Mappers::toResource(payload[0])]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<set-variable value="#[201]" doc:name="Set 201 status" doc:id="6069644b-0062-420f-b811-a9926b336742" variableName="httpStatus"/>
   </flow>
 
   <flow name="get:\correspondence-requests\(requestId):correspondence_sapi_config">
